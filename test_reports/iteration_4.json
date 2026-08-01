@@ -1,0 +1,36 @@
+{
+  "summary": "Comprehensive testing of Firms CRUD + firm_id scoping + Payslip endpoint. Backend: created /app/backend/tests/test_firms_payslip.py with 15 tests — all pass (Firms CRUD role gating, delete detaches employee/expense/tax references, firm_id filters on expenses/tax/dashboard/ledger, employee firm_id updates, payslip w/ firm+advances, payslip no advances no firm, 404, accountant read access). Regression test_new_features.py still 15/15 pass; total 30/30. Frontend: verified owner sees nav-settings + Settings page with firms-table, deploy-card, Add Firm dialog (all required data-testids present); firm CRUD works end-to-end via UI; Ledger firm-filter chips (4 seen) filter, edit-employee dialog has employee-firm-select; Payslip page renders with employee name (Ravi Kumar), firm header, net payable (₹32,000), print + back buttons. Expenses page has expense-firm-select + filter-firm; Tax page has tax-firm-select. Accountant does NOT see nav-settings and /settings redirects to /dashboard; add-firm-button not rendered.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Settings > Firm dialog", "issues": ["A11y warning: DialogContent missing Description/aria-describedby (Radix warning in console). Non-blocking."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_firms_payslip.py",
+    "/app/backend/tests/test_new_features.py",
+    "/app/test_reports/pytest/firms_payslip.xml"
+  ],
+  "action_items": [
+    "Optional: add DialogDescription (or aria-describedby) to Firm/Employee/Advance dialogs to silence Radix a11y warnings.",
+    "Optional: sort/rank category_breakdown consistent across firm-filtered dashboards (already sorted by amount desc — no action needed unless UX asks otherwise)."
+  ],
+  "critical_code_review_comments": [
+    "server.py delete_firm correctly detaches firm_id from employees/expenses/tax_entries before delete — verified.",
+    "Payslip response excludes _id via explicit projection {'_id': 0} on all subqueries.",
+    "Role gating on firm mutations uses require_owner Depends — accountant blocked (403) confirmed.",
+    "server.py is 682 lines — approaching but under the 700-line split threshold; consider modularising firms/payslip into routers/ next iteration.",
+    "Frontend Payslip page has an initial 'Loading payslip...' state (no data-testid) — could benefit from data-testid='payslip-loading' for tests. Non-critical."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_firms_payslip.py"
+  ],
+  "success_rate": {"backend": "100% (30/30, 15 new + 15 regression)", "frontend": "100% (all required flows and testids verified)"},
+  "test_credentials": "Owner Bearer/cookie: test_token_1785581543050 (user_id=test_owner_1785581543050). Accountant Bearer/cookie: test_acc_session_1785581696596 (user_id=test-acc-1785581696596).",
+  "seed_data_creation": "Tests self-seed and clean up TEST_* firms/employees/expenses/tax entries. No persistent test data left behind.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Run all backend tests with: TEST_OWNER_TOKEN=test_token_1785581543050 TEST_OWNER_USER_ID=test_owner_1785581543050 TEST_ACC_TOKEN=test_acc_session_1785581696596 TEST_ACC_USER_ID=test-acc-1785581696596 pytest backend/tests/ -v. Frontend uses cookie session_token; localStorage not used. Seeded firms Pratap Trading Co (firm_6c3b493989) + Pratap Logistics (firm_796e4e767b); seeded employee Ravi Kumar emp_a3091b1daa mapped to Trading Co with ₹5000 advance in 2026-01. All new features working; no open blockers."
+}

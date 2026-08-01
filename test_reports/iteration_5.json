@@ -1,0 +1,48 @@
+{
+  "summary": "Iteration 5: Validated OWNER_EMAILS env bootstrap + invitations CRUD + Team page invite UI. Wrote /app/backend/tests/test_owner_emails_invitations.py (11 tests) covering: OWNER_EMAILS auto-promotion on /auth/me (with DB persistence check), idempotency, non-env users unchanged, invitations RBAC (accountant 403), CRUD + upsert + role update for existing user + 400/404 edge cases. Full pytest run = 40/40 PASSED including all prior regression (test_new_features.py 15, test_firms_payslip.py 15). FRONTEND: initial load of /team was completely blank due to a critical crash 'Mail is not defined' — Users.jsx referenced state hooks (inviteOpen/inviteForm/invites) and icons (Mail, Plus) that were never declared/imported. Fixed by adding the missing useState hooks and lucide-react imports. After fix, verified full invite flow via Playwright: invite-user-button + reset-data-button visible, dialog opens with invite-email-input/invite-role-select/send-invite-button testids, submitting creates an invitation, dialog closes, invites-table renders with revoke-invite-{email} button, clicking revoke deletes the invite and shows 'Invitation revoked' toast. No console errors after fix.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "Users.jsx (/team page)",
+        "issue": "Page rendered completely blank due to ReferenceError: Mail is not defined. Component used inviteOpen/setInviteOpen, inviteForm/setInviteForm, invites/setInvites state variables and Mail/Plus icons WITHOUT declaring the useState hooks or importing the icons from lucide-react. Fixed by testing agent.",
+        "selector": "n/a - top-level crash",
+        "priority": "CRITICAL (fixed)"
+      }
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_owner_emails_invitations.py",
+    "/app/backend/tests/test_new_features.py",
+    "/app/backend/tests/test_firms_payslip.py",
+    "/app/test_reports/pytest/iteration5.xml"
+  ],
+  "action_items": [
+    "Users.jsx crash is already fixed by testing agent (added missing imports/state) — main agent should review the fix and ensure no other pages have similar undeclared references.",
+    "Consider adding a lint step (react/jsx-no-undef, no-undef) to CI to catch missing imports before runtime.",
+    "Non-blocking: /api/invitations/{email} DELETE takes a raw email path param — works but URL-encoding is done by frontend; document this."
+  ],
+  "critical_code_review_comments": [
+    "server.py _resolve_role_for correctly precedences OWNER_EMAILS > invitation > current_role > first-user-owner — good design.",
+    "process_session recomputes role for existing users on every login — this means an owner env-listed user can never be demoted (correct per requirement).",
+    "/auth/me writes to DB only when role differs (line 174-176) — idempotent.",
+    "Invitation POST performs both existing-user role update AND upsert — even if user later re-invited, the invitation row still exists to reapply on future OAuth session for the same email (bit redundant but harmless).",
+    "Invitations use $set with the full doc (including a freshly generated invitation_id) on upsert, so the invitation_id CHANGES on every upsert (not ideal for audit but not a bug).",
+    "server.py is now ~752 lines — over the 700 recommended threshold. Consider extracting invitations + users routes into a routers/ module in next iteration.",
+    "Users.jsx bug (fixed) reveals a lack of pre-commit lint/typecheck. Recommend enabling ESLint no-undef rule in CI.",
+    "Invitation email is not validated with a strict regex — 'x@y' passes since 'in email:' check is only presence of '@'. Non-critical but could be tightened with pydantic EmailStr."
+  ],
+  "updated_files": [
+    "/app/frontend/src/pages/Users.jsx (added missing Mail/Plus imports and inviteOpen/inviteForm/invites useState hooks)",
+    "/app/backend/tests/test_owner_emails_invitations.py (new)"
+  ],
+  "success_rate": {"backend": "100% (40/40 across all test files)", "frontend": "100% (Team page + invite flow verified end-to-end after fix)"},
+  "test_credentials": "Owner Bearer/cookie: test_token_1785581543050 (owner@test.com). Accountant: test_acc_session_1785581696596. OWNER_EMAILS env=cks.pratap.enterprises@gmail.com.",
+  "seed_data_creation": "Tests self-seed temporary users via mongosh (TEST_OE_*, TEST_INVU_*) and clean up after. Playwright test used email playwright_test_invite@example.com and revoked it in the same run — no residue.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "All 40 backend tests pass. Run with: TEST_OWNER_TOKEN=test_token_1785581543050 TEST_OWNER_USER_ID=test_owner_1785581543050 TEST_ACC_TOKEN=test_acc_session_1785581696596 TEST_ACC_USER_ID=test-acc-1785581696596 pytest backend/tests/ -v. Users.jsx crash was fixed in this iteration — verify main agent's follow-up doesn't reintroduce missing state/imports. Backend OWNER_EMAILS auto-promotion writes to DB on /auth/me — verified via mongosh readback.",
+  "rca_of_the_issue": "RCA of Users.jsx crash: When main agent added the Invite-by-Email feature, the JSX (dialog, table, button handlers) referenced state variables (inviteOpen, inviteForm, invites) and lucide-react icons (Mail, Plus) that were never declared at the top of the component. Because these are hoisted-check-failures at runtime (not compile-time in Babel), the module compiled successfully but the component threw ReferenceError on first render, causing React to unmount the entire page → blank screen. Reproduction: navigate to /team as owner — screen goes blank with pageerror 'Mail is not defined'. Mitigation applied: (1) added Mail, Plus to the lucide-react import line; (2) added three useState hooks: invites=[], inviteOpen=false, inviteForm={email:'',role:'accountant'}. Post-fix verified with Playwright — full invite flow works, no console errors."
+}

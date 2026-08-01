@@ -1,0 +1,96 @@
+{
+  "theme": "light_and_dark",
+  "archetype": "Swiss & High-Contrast (Finance Variant)",
+  "typography": {
+    "heading_font": "Cabinet Grotesk",
+    "body_font": "IBM Plex Sans",
+    "mono_font": "IBM Plex Mono",
+    "rules": [
+      "Use tight letter spacing for large numbers (tracking-tight).",
+      "All financial figures (\u20B9) MUST use IBM Plex Mono for tabular lining and clarity.",
+      "Headings use Cabinet Grotesk font-medium or font-semibold, never font-black unless for massive KPIs.",
+      "Never use Inter for headings."
+    ]
+  },
+  "colors": {
+    "primary": "#09090b",
+    "secondary": "#71717a",
+    "background": "#FAFAFA",
+    "surface": "#FFFFFF",
+    "border": "#E4E4E7",
+    "success": "#059669",
+    "danger": "#E11D48",
+    "warning": "#D97706",
+    "rules": [
+      "No full-screen gradients. Texture over gloss.",
+      "Never use pure black #000000; use #09090b (Zinc 950).",
+      "Use Semantic colors exclusively for financial states: Danger/Crimson for expenses, Success/Emerald for received funds/repayments."
+    ]
+  },
+  "visual_enhancers": {
+    "surfaces": "Grid Borders",
+    "shadows": "None. Use 1px solid borders (border-zinc-200) to define hierarchy instead of shadows.",
+    "borders": "border-zinc-200 for containers, border-zinc-300 on hover.",
+    "radius": "rounded-none or max rounded-sm (2px) to maintain a sharp, authoritative, accounting ledger feel."
+  },
+  "layouts": {
+    "dashboard": "High Density Grid (MODE B) with gap-4 or gap-6. Every pixel utilized.",
+    "spacing": "Dense internally for tables (py-2, px-3), generous for section gaps (py-8, py-12).",
+    "alignment": "All financial numbers MUST be right-aligned in tables. Labels left-aligned. Never center-align tabular data."
+  },
+  "components": {
+    "cards": "Remove default shadcn rounded corners and shadows. Apply 1px border. Use rectangular, dense styles.",
+    "tables": "Dense rows, 1px border bottoms, clear hover states (hover:bg-zinc-50). Strip alternating row colors, rely on 1px borders.",
+    "forms": "Use Shadcn forms but strip out rounded corners. Inputs must have focus:ring-1 focus:ring-zinc-900 focus:border-zinc-900.",
+    "buttons": "Sharp edges (rounded-none), dark fill (bg-zinc-900), white text. Include subtle scale down on active: scale-95.",
+    "dropdowns": "DO NOT use transparent backgrounds. Must have solid white/dark background with 1px border."
+  },
+  "motion": {
+    "micro_interactions": "Hover states on all rows and cards. Very fast transitions (duration-150 ease-out).",
+    "page_transitions": "Subtle fade-in for dashboard widgets."
+  },
+  "accessibility": {
+    "contrast": "Ensure text contrast meets APCA/WCAG standards.",
+    "focus": "High contrast focus rings required on all interactive elements.",
+    "motion": "Respect prefers-reduced-motion."
+  },
+  "testing": {
+    "attributes": "All interactive and key informational elements MUST include a 'data-testid' attribute (e.g., data-testid='expense-submit-button')."
+  },
+  "media": {
+    "icons": "Phosphor Icons (@phosphor-icons/react) for dense, professional financial tools. lucide-react is also acceptable if Phosphor is unavailable.",
+    "images": [
+      {
+        "url": "https://images.unsplash.com/photo-1498262257252-c282316270bc?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1OTV8MHwxfHNlYXJjaHwxfHxhYnN0cmFjdCUyMGFyY2hpdGVjdHVyZSUyMHRleHR1cmV8ZW58MHx8fHwxNzg1NTgxMTE4fDA&ixlib=rb-4.1.0&q=85",
+        "category": "login_background",
+        "description": "Abstract architecture gray texture for the login page hero/split screen."
+      }
+    ]
+  },
+  "libraries": {
+    "charts": "Recharts (via Shadcn ui/charts) for Category Breakdown. Use minimal grid lines and high contrast semantic colors.",
+    "icons": "yarn add @phosphor-icons/react",
+    "toasts": "sonner"
+  },
+  "instructions_to_main_agent": [
+    "Build a Left Sidebar navigation (Dashboard, Expenses, Staff Ledger, Tax Compliance).",
+    "Dashboard: Top-left 'North Star KPI' (Total Spend). Include cards for Petrol Cost, Total Staff Advances, Cash vs UPI ratio, and a Category Breakdown Chart.",
+    "Expense Logger: Create a fast-entry form. Category must be a Shadcn Combobox/Select with pre-defined defaults and a '+ Add Custom Category' action.",
+    "Staff Salary Ledger: Create a data-dense table with Columns: Employee Name, Base Salary, Month Advances (Sum), Net Payable. Include action to 'Add Advance'.",
+    "Tax Compliance: A dedicated table for GST and ITR Advance Tax with challan numbers.",
+    "Use pure HTML + Tailwind for macro-layouts, Shadcn for micro-components (Tables, Forms).",
+    "Inject Cabinet Grotesk for Headings and IBM Plex Mono for all \u20B9 amounts.",
+    "Do not use generic 'Inter' for headings. Never use Emojis."
+  ],
+  "UNIVERSAL_GUIDELINES_FOR_MAIN_AGENT": [
+    "You tend to converge toward generic outputs. Do not make generic centered layouts.",
+    "Create depth through 1px border layering, not shadows.",
+    "NEVER apply universal transition (transition: all).",
+    "NEVER center align the app container (.App { text-align: center; }).",
+    "Always use modern button styles like sharp buttons with interaction animations.",
+    "NEVER use AI assistant Emoji characters like \ud83e\udd16\ud83e\udde0\ud83d\udcad\ud83d\udca1\ud83d\udd2e\ud83c\udfaf for icons.",
+    "Every interaction needs micro-animations - hover states, transitions.",
+    "Use Shadcn calendar for date pickers (NOT HTML input type='date').",
+    "Use Shadcn dropdown-menu (NOT HTML <select>)."
+  ]
+}

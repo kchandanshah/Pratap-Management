@@ -1,0 +1,34 @@
+{
+  "summary": "Tested new features end-to-end: expenses date-range filter, salary advance repay endpoint & ledger impact, and user management (owner-only). Backend: 9/9 pytest tests passed. Frontend: expenses preset buttons + custom date range change filter counts; ledger toggle expands advance entries and repay button toggles net-payable correctly (97,000 → 105,000 → 97,000 on undo); Team page lists users with correct role badges, self-owner shows only Demote (no Remove), accountant is blocked from /team (redirected) and has no nav-team link. All edge cases pass: non-advance repay → 400, non-existent repay → 404, owner self-delete → 400, accountant GET /users → 403.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Expenses filter", "issues": ["Minor: 'All time' preset button is not visually active by default (no preset value initially set), so quick-range buttons only highlight after first click. Cosmetic only."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_new_features.py",
+    "/app/test_reports/pytest/new_features.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Expenses.jsx: initial filter state lacks preset:'all'; default UI shows no active preset button until user clicks. Non-blocking.",
+    "Users.jsx: Client-side check for last-owner demotion only counts self; if demoting another owner leaves 0 owners, backend does not prevent it. Consider server-side safeguard: reject PUT /users/{id}/role when it would leave zero owners.",
+    "server.py: /api/expenses date filter uses string comparison ($gte/$lte) which works because YYYY-MM-DD is lexicographically ordered — safe, but noted.",
+    "server.py: DELETE /api/users allows removing the last remaining owner (only self-delete is blocked). Could lock out admin access if two owners delete each other. Recommend server-side 'at least one owner' guard."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_new_features.py"
+  ],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "Owner Bearer: test_token_1785581543050 (user_id=test_owner_1785581543050); Accountant Bearer: test_acc_session_1785581696596",
+  "seed_data_creation": "Temporarily seeded UI_TEST_EMP employee + Salary Advance for August 2026 to exercise ledger toggle/repay UI. Cleaned up after run.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "System date is 2026-08-01, so 'this_month'/'today' presets on Expenses return 0 for the seeded January 2026 test data — expected behavior. When adding UI tests for ledger repay, seed an employee + Salary Advance for the current month (2026-08). Backend tests in /app/backend/tests/test_new_features.py cover all new endpoints and can be re-run via `pytest backend/tests/test_new_features.py -v`."
+}
