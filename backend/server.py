@@ -128,40 +128,22 @@ async def process_session(request: Request, response: Response):
     email = data["email"]
     existing = await db.users.find_one({"email": email}, {"_id": 0})
     if existing:
-    user_id = existing["user_id"]
-
-    role = await _resolve_role_for(email, existing["role"])
-
-    await db.users.update_one(
-        {"user_id": user_id},
-        {
-            "$set": {
-                "name": data["name"],
-                "picture": data.get("picture"),
-                "role": role,
-            }
-        },
-    )
-
-    # Block users who are not ACTIVE
-    if existing.get("status", "PENDING") != "ACTIVE":
-        raise HTTPException(
-            status_code=403,
-            detail="Your account is waiting for owner approval."
+        user_id = existing["user_id"]
+        # Recompute role — OWNER_EMAILS env should always take precedence
+        role = await _resolve_role_for(email, existing["role"])
+        await db.users.update_one(
+            {"user_id": user_id},
+            {"$set": {"name": data["name"], "picture": data.get("picture"), "role": role}},
         )
     else:
         role = await _resolve_role_for(email)
         user_id = f"user_{uuid.uuid4().hex[:12]}"
-
-        status = "ACTIVE" if role == "OWNER" else "PENDING"
-
         await db.users.insert_one({
             "user_id": user_id,
             "email": email,
             "name": data["name"],
             "picture": data.get("picture"),
             "role": role,
-            "status": "PENDING",
             "created_at": iso(now_utc()),
         })
 
@@ -750,42 +732,6 @@ async def reset_data(payload: ResetPayload, user: User = Depends(require_owner))
             "custom_categories": cat.deleted_count,
         },
     }
-
-@api_router.get("/users/pending")
-@api_router.post("/users/{user_id}/approve")
-async def approve_user(user_id: str, user: User = Depends(get_current_user)):
-    if user.role != "OWNER":
-        raise HTTPException(
-            status_code=403,
-            detail="Only owners can approve users"
-        )
-
-    result = await db.users.update_one(
-        {"user_id": user_id},
-        {
-            "$set": {
-                "status": "ACTIVE"
-            }
-        }
-    )
-
-    if result.modified_count == 0:
-        raise HTTPException(
-            status_code=404,
-            detail="User not found"
-        )
-
-    return {"message": "User approved successfully"}
-async def get_pending_users(user: User = Depends(get_current_user)):
-    if user.role != "OWNER":
-        raise HTTPException(status_code=403, detail="Only owners can view pending users")
-
-    pending = await db.users.find(
-        {"status": "PENDING"},
-        {"_id": 0}
-    ).to_list(100)
-
-    return pending
 
 app.include_router(api_router)
 

@@ -174,7 +174,7 @@ export default function Users() {
             {!loading && rows.length === 0 && (
               <tr><td colSpan={4} className="text-center py-8 text-zinc-500">
                 <UsersIcon size={32} className="mx-auto text-zinc-300 mb-2" />
-                No teammates yet. Share the app URL — anyone who signs in with Google joins as an Accountant.
+                No team members yet. Invite users by email. Only invited users can sign in and access this workspace.
               </td></tr>
             )}
             {rows.map((u) => {
