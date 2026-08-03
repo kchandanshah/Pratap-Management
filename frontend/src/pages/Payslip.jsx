@@ -58,7 +58,7 @@ export default function Payslip() {
           <div>
             <div className="text-[10px] font-mono-num uppercase tracking-widest text-zinc-500">Payslip</div>
             <h1 className="font-display text-3xl font-medium tracking-tight mt-1">
-              {data.firm?.name || "PRATAP ENTERPRISE LEDGER WORKS"}
+              {data.firm?.name || "PRATAP | CALCI | LEDGER"}
             </h1>
             {data.firm && (
               <div className="text-xs text-zinc-500 mt-1 space-y-0.5">

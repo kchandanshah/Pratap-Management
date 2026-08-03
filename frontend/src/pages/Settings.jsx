@@ -8,7 +8,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { Plus, Building2, Trash2, Pencil, Rocket, ExternalLink, Info } from "lucide-react";
+import { Plus, Building2, Trash2, Pencil, Info } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { Navigate } from "react-router-dom";
 
@@ -109,56 +109,10 @@ export default function Settings() {
         </div>
       </section>
 
-      {/* Deploy section */}
-      <section className="mb-10">
-        <div className="mb-4">
-          <div className="text-[10px] font-mono-num uppercase tracking-widest text-zinc-500">B · Production</div>
-          <h2 className="font-display text-2xl font-medium tracking-tight mt-1 flex items-center gap-2">
-            <Rocket size={20} /> Deploy to Production
-          </h2>
-        </div>
-        <div className="border border-zinc-950 bg-zinc-950 text-zinc-100 p-6" data-testid="deploy-card">
-          <div className="flex gap-6">
-            <div className="flex-1 space-y-3">
-              <div className="text-[10px] font-mono-num uppercase tracking-widest text-zinc-400">Live App</div>
-              <a
-                href="http://localhost:3000"
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center gap-2 font-mono-num text-lg text-white hover:text-emerald-300 transition-colors"
-              >
-                finance-hub-pro-15.emergent.host
-                <ExternalLink size={16} />
-              </a>
-              <p className="text-sm text-zinc-400 leading-relaxed pt-2">
-                Any changes made in the preview environment do not automatically go live.
-                To push your latest updates (like new firms, employees, categories, or app fixes) to the production URL above:
-              </p>
-              <ol className="text-sm text-zinc-300 space-y-2 pt-2 list-decimal list-inside">
-                <li>Open the Emergent editor for this app</li>
-                <li>Click the <span className="font-mono-num bg-zinc-800 px-2 py-0.5">Deploy</span> button in the top-right</li>
-                <li>Wait ~2 minutes for the redeploy to complete</li>
-                <li>Visit the production URL and verify your latest changes</li>
-              </ol>
-            </div>
-            <div className="w-px bg-zinc-800" />
-            <div className="flex-1 space-y-3">
-              <div className="text-[10px] font-mono-num uppercase tracking-widest text-zinc-400">After deploy</div>
-              <p className="text-sm text-zinc-400 leading-relaxed">
-                Production data lives in a separate database. If you added employees or firms on preview, you'll re-enter them once on production (or leave production data as-is).
-              </p>
-              <p className="text-sm text-zinc-400 leading-relaxed pt-2">
-                To wipe production data after signing in there, use <span className="font-mono-num text-white">Team → Reset App Data</span>.
-              </p>
-            </div>
-          </div>
-        </div>
-      </section>
-
       {/* App info */}
       <section>
         <div className="mb-4">
-          <div className="text-[10px] font-mono-num uppercase tracking-widest text-zinc-500">C · App</div>
+          <div className="text-[10px] font-mono-num uppercase tracking-widest text-zinc-500">B · App</div>
           <h2 className="font-display text-2xl font-medium tracking-tight mt-1 flex items-center gap-2">
             <Info size={20} /> App Information
           </h2>
@@ -166,7 +120,7 @@ export default function Settings() {
         <div className="border border-zinc-200 bg-white p-6 grid grid-cols-2 gap-6 text-sm">
           <div>
             <div className="text-[10px] font-mono-num uppercase tracking-widest text-zinc-500">Brand</div>
-            <div className="font-display text-lg mt-1">PRATAP ENTERPRISE LEDGER WORKS</div>
+            <div className="font-display text-lg mt-1">PRATAP | CALCI | LEDGER</div>
           </div>
           <div>
             <div className="text-[10px] font-mono-num uppercase tracking-widest text-zinc-500">Owner Signed In</div>

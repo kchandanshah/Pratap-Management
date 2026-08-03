@@ -26,6 +26,7 @@ export default function Expenses() {
   const [expenses, setExpenses] = useState([]);
   const [filter, setFilter] = useState({ category: "all", payment_mode: "all", start: "", end: "", preset: "all", firm_id: "all" });
   const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
 
   const today = new Date().toISOString().slice(0, 10);
   const [form, setForm] = useState({
@@ -37,6 +38,7 @@ export default function Expenses() {
     notes: "",
     employee_id: "",
     firm_id: "",
+    salary_paid_by: "Owner",
   });
 
   const [newCatOpen, setNewCatOpen] = useState(false);
@@ -54,6 +56,7 @@ export default function Expenses() {
             ...(filter.firm_id !== "all" ? { firm_id: filter.firm_id } : {}),
             ...(filter.start ? { start: filter.start } : {}),
             ...(filter.end ? { end: filter.end } : {}),
+            ...(search ? { search } : {}),
           },
         }),
         api.get("/employees"),
@@ -70,7 +73,7 @@ export default function Expenses() {
   };
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { load(); }, [filter.category, filter.payment_mode, filter.firm_id, filter.start, filter.end]);
+  useEffect(() => { load(); }, [filter.category, filter.payment_mode, filter.firm_id, filter.start, filter.end, search]);
 
   const applyPreset = (preset) => {
     const now = new Date();
@@ -110,11 +113,12 @@ export default function Expenses() {
       await api.post("/expenses", {
         ...form,
         amount: parseFloat(form.amount),
-        employee_id: form.category === "Salary Advance" ? form.employee_id || null : null,
+        employee_id: ["Salary Advance", "Employer Salary"].includes(form.category) ? form.employee_id || null : null,
+        salary_paid_by: form.category === "Employer Salary" ? form.salary_paid_by : null,
         firm_id: form.firm_id || null,
       });
       toast.success("Expense logged");
-      setForm({ ...form, vendor: "", amount: "", notes: "", employee_id: "" });
+      setForm({ ...form, vendor: "", amount: "", notes: "", employee_id: "", salary_paid_by: "Owner" });
       load();
     } catch (err) {
       toast.error(err.response?.data?.detail || "Failed to log expense");
@@ -271,6 +275,32 @@ export default function Expenses() {
             </Select>
           </div>
         )}
+        {form.category === "Employer Salary" && (
+          <>
+            <div className="lg:col-span-2">
+              <Label className="text-[10px] font-mono-num uppercase tracking-widest text-zinc-500">Employee receiving salary</Label>
+              <Select value={form.employee_id} onValueChange={(v) => {
+                const employee = employees.find((item) => item.employee_id === v);
+                setForm({ ...form, employee_id: v, vendor: employee?.name || form.vendor });
+              }}>
+                <SelectTrigger data-testid="salary-employee" className="mt-2 h-10 rounded-none border-zinc-300"><SelectValue placeholder="Select employee" /></SelectTrigger>
+                <SelectContent className="rounded-none bg-white border border-zinc-200">
+                  {employees.map((employee) => <SelectItem key={employee.employee_id} value={employee.employee_id}>{employee.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="lg:col-span-2">
+              <Label className="text-[10px] font-mono-num uppercase tracking-widest text-zinc-500">Salary paid by</Label>
+              <Select value={form.salary_paid_by} onValueChange={(v) => setForm({ ...form, salary_paid_by: v })}>
+                <SelectTrigger data-testid="salary-paid-by" className="mt-2 h-10 rounded-none border-zinc-300"><SelectValue /></SelectTrigger>
+                <SelectContent className="rounded-none bg-white border border-zinc-200">
+                  <SelectItem value="Owner">Owner</SelectItem>
+                  <SelectItem value="Accountant">Accountant</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </>
+        )}
         {firms.length > 0 && (
           <div className="lg:col-span-2">
             <Label className="text-[10px] font-mono-num uppercase tracking-widest text-zinc-500">Firm</Label>
@@ -327,6 +357,7 @@ export default function Expenses() {
           ))}
         </div>
         <div className="flex items-center gap-3 flex-wrap">
+          <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search vendor…" className="w-48 h-8 rounded-none text-xs" />
           <div className="flex items-center gap-2">
             <span className="text-[10px] font-mono-num uppercase tracking-widest text-zinc-500">From</span>
             <input

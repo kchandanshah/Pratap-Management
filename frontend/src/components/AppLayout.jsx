@@ -1,18 +1,20 @@
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
-import { LayoutDashboard, Receipt, Users, FileText, LogOut, Wallet, Shield, UsersRound, Settings as SettingsIcon } from "lucide-react";
+import { LayoutDashboard, Receipt, Users, FileText, LogOut, Wallet, Shield, UsersRound, Settings as SettingsIcon, CalendarCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 const NAV = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard, testid: "nav-dashboard" },
   { to: "/expenses", label: "Expenses", icon: Receipt, testid: "nav-expenses" },
   { to: "/ledger", label: "Staff Ledger", icon: Users, testid: "nav-ledger" },
+  { to: "/attendance", label: "Attendance", icon: CalendarCheck, testid: "nav-attendance" },
   { to: "/tax", label: "Tax Compliance", icon: FileText, testid: "nav-tax" },
 ];
 
 const OWNER_NAV = [
   { to: "/team", label: "Team", icon: UsersRound, testid: "nav-team" },
   { to: "/settings", label: "Settings", icon: SettingsIcon, testid: "nav-settings" },
+  { to: "/controls", label: "Controls", icon: SettingsIcon, testid: "nav-controls" },
 ];
 
 export default function AppLayout() {
@@ -32,7 +34,7 @@ export default function AppLayout() {
             <Wallet size={16} />
           </div>
           <div>
-            <div className="font-display text-sm font-semibold tracking-tight leading-none">PRATAP ENTERPRISE</div>
+            <div className="font-display text-sm font-semibold tracking-tight leading-none">PRATAP | CALCI | LEDGER</div>
             <div className="text-[10px] font-mono-num text-zinc-500 uppercase tracking-widest mt-1">Ledger Works · IN</div>
           </div>
         </div>

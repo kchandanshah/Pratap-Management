@@ -12,6 +12,8 @@ import TaxCompliance from "@/pages/TaxCompliance";
 import Users from "@/pages/Users";
 import Settings from "@/pages/Settings";
 import Payslip from "@/pages/Payslip";
+import Controls from "@/pages/Controls";
+import Attendance from "@/pages/Attendance";
 import AppLayout from "@/components/AppLayout";
 
 function ProtectedShell() {
@@ -44,6 +46,8 @@ function AppRoutes() {
         <Route path="/team" element={<Users />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="/payslip/:employeeId" element={<Payslip />} />
+        <Route path="/controls" element={<Controls />} />
+        <Route path="/attendance" element={<Attendance />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

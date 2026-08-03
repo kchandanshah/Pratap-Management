@@ -193,15 +193,17 @@ export default function StaffLedger() {
               <th className="text-left py-3 px-4">Employee</th>
               <th className="text-left py-3 px-4">Role</th>
               <th className="text-right py-3 px-4">Base Salary</th>
+              <th className="text-right py-3 px-4">Paid Days</th>
+              <th className="text-right py-3 px-4">Salary by Attendance</th>
               <th className="text-right py-3 px-4">Advances ({ledger?.month})</th>
               <th className="text-right py-3 px-4">Net Payable</th>
               {isOwner && <th className="w-12"></th>}
             </tr>
           </thead>
           <tbody>
-            {!ledger && <tr><td colSpan={6} className="text-center py-8 text-zinc-500">Loading…</td></tr>}
+            {!ledger && <tr><td colSpan={8} className="text-center py-8 text-zinc-500">Loading…</td></tr>}
             {ledger && ledger.employees.length === 0 && (
-              <tr><td colSpan={6} className="text-center py-8 text-zinc-500">No employees yet. Add one to start tracking.</td></tr>
+              <tr><td colSpan={8} className="text-center py-8 text-zinc-500">No employees yet. Add one to start tracking.</td></tr>
             )}
             {ledger?.employees.map((e) => {
               const isOpen = !!expanded[e.employee_id];
@@ -222,6 +224,8 @@ export default function StaffLedger() {
                     </td>
                     <td className="py-3 px-4 text-zinc-500 text-xs">{e.role_title || "—"}</td>
                     <td className="py-3 px-4 text-right font-mono-num">{formatINR(e.base_salary)}</td>
+                    <td className="py-3 px-4 text-right font-mono-num">{e.attendance_recorded ? e.payable_days : "Full month"}</td>
+                    <td className="py-3 px-4 text-right font-mono-num">{formatINR(e.attendance_salary || e.base_salary)}</td>
                     <td className="py-3 px-4 text-right font-mono-num text-rose-600">
                       -{formatINR(e.advances)}
                       {repaid.length > 0 && (
@@ -257,7 +261,7 @@ export default function StaffLedger() {
                   </tr>
                   {isOpen && (
                     <tr className="bg-zinc-50/50" data-testid={`advances-detail-${e.employee_id}`}>
-                      <td colSpan={isOwner ? 6 : 5} className="p-0">
+                      <td colSpan={isOwner ? 8 : 7} className="p-0">
                         <div className="px-8 py-4">
                           <div className="text-[10px] font-mono-num uppercase tracking-widest text-zinc-500 mb-3">
                             Advance entries for {ledger.month} · {e.advance_entries.length} total

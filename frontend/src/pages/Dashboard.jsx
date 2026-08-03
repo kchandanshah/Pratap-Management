@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import api, { formatINR } from "@/lib/api";
-import { ArrowUpRight, TrendingUp, Fuel, Users, Wallet } from "lucide-react";
+import { ArrowUpRight, TrendingUp, Fuel, Users, Wallet, Download, CalendarCheck } from "lucide-react";
+import { API } from "@/lib/api";
+import { Button } from "@/components/ui/button";
 import {
   ResponsiveContainer,
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Cell,
@@ -36,6 +38,7 @@ const KpiCard = ({ label, value, index, icon: Icon, sub, testid }) => (
 
 export default function Dashboard() {
   const [month, setMonth] = useState(new Date().toISOString().slice(0, 7));
+  const [periodMode, setPeriodMode] = useState("month");
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -43,13 +46,14 @@ export default function Dashboard() {
     (async () => {
       setLoading(true);
       try {
-        const r = await api.get("/dashboard", { params: { month } });
+        const r = await api.get("/dashboard", { params: periodMode === "year" ? { year: month.slice(0, 4) } : { month } });
         setData(r.data);
       } finally {
         setLoading(false);
       }
     })();
-  }, [month]);
+  }, [month, periodMode]);
+  const exportCategories = () => { const value = periodMode === "year" ? `year=${month.slice(0, 4)}` : `month=${month}`; window.location.href = `${API}/reports/category-spend/export?${value}`; };
 
   const cashUpiTotal = (data?.cash || 0) + (data?.upi || 0);
   const cashPct = cashUpiTotal > 0 ? Math.round(((data?.cash || 0) / cashUpiTotal) * 100) : 0;
@@ -74,7 +78,7 @@ export default function Dashboard() {
             Business spend, staff advances & tax posture for the selected period.
           </p>
         </div>
-        <MonthPicker month={month} onChange={setMonth} />
+        <div className="flex gap-2"><select value={periodMode} onChange={(e) => setPeriodMode(e.target.value)} className="h-9 border border-zinc-300 px-2 text-sm bg-white"><option value="month">Month</option><option value="year">Year</option></select>{periodMode === "month" ? <MonthPicker month={month} onChange={setMonth} /> : <input type="number" value={month.slice(0,4)} onChange={(e) => setMonth(`${e.target.value}-01`)} className="h-9 w-24 border border-zinc-300 px-2 text-sm" />}</div>
       </div>
 
       {loading ? (
@@ -82,11 +86,12 @@ export default function Dashboard() {
       ) : (
         <>
           {/* KPIs */}
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 mb-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4 mb-8">
             <KpiCard testid="kpi-total-spend" index={0} label="Total Spend" value={formatINR(data.total_spend)} icon={TrendingUp} sub={`${data.expense_count} entries`} />
             <KpiCard testid="kpi-petrol" index={1} label="Petrol / Fuel" value={formatINR(data.total_petrol)} icon={Fuel} sub="Fuel spend this period" />
             <KpiCard testid="kpi-advances" index={2} label="Staff Advances" value={formatINR(data.total_advances)} icon={Users} sub="Given to employees" />
             <KpiCard testid="kpi-cash-upi" index={3} label="Cash vs UPI" value={`${cashPct}% / ${upiPct}%`} icon={Wallet} sub={`${formatINR(data.cash)} · ${formatINR(data.upi)}`} />
+            <KpiCard testid="kpi-attendance" index={4} label="Attendance" value={`${data.attendance?.present || 0} P · ${data.attendance?.half_day || 0} H · ${data.attendance?.absent || 0} A`} icon={CalendarCheck} sub={`Recorded for ${data.month}`} />
           </div>
 
           {/* Charts */}
@@ -170,7 +175,7 @@ export default function Dashboard() {
               <div>
                 <div className="text-[10px] font-mono-num uppercase tracking-widest text-zinc-500">04 · All Categories</div>
                 <h2 className="font-display text-xl font-medium tracking-tight mt-1">Line items</h2>
-              </div>
+              </div><Button onClick={exportCategories} variant="outline" className="rounded-none h-9"><Download size={14} className="mr-2" /> Export Excel CSV</Button>
             </div>
             <table className="w-full text-sm">
               <thead>

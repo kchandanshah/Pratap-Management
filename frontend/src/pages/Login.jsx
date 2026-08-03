@@ -32,7 +32,7 @@ export default function Login() {
           <div className="w-8 h-8 border border-zinc-100 flex items-center justify-center">
             <Wallet size={18} />
           </div>
-          <span className="font-display font-semibold tracking-tight">PRATAP ENTERPRISE LEDGER WORKS</span>
+          <span className="font-display font-semibold tracking-tight">PRATAP | CALCI | LEDGER</span>
         </div>
         <div className="relative z-10 space-y-6">
           <h1 className="font-display text-5xl xl:text-6xl font-medium leading-[0.95] tracking-tight">
@@ -67,7 +67,7 @@ export default function Login() {
             <div className="w-8 h-8 border border-zinc-950 flex items-center justify-center">
               <Wallet size={18} />
             </div>
-            <span className="font-display font-semibold tracking-tight">PRATAP ENTERPRISE LEDGER WORKS</span>
+            <span className="font-display font-semibold tracking-tight">PRATAP | CALCI | LEDGER</span>
           </div>
           <div className="space-y-2">
             <div className="text-xs font-mono-num uppercase tracking-widest text-zinc-500">
@@ -75,7 +75,7 @@ export default function Login() {
             </div>
             <h2 className="font-display text-4xl font-medium tracking-tight">Sign in to continue</h2>
             <p className="text-sm text-zinc-500">
-              First person to sign in becomes the Owner. Everyone else joins as an Accountant and can be upgraded later by the Owner.
+              Access is private. Your Google email must be invited by an Owner before you can sign in.
             </p>
           </div>
           <Button

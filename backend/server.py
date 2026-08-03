@@ -1,4 +1,4 @@
-from fastapi import FastAPI, APIRouter, HTTPException, Depends, Request, Response, Query
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, Request, Response, Query, UploadFile, File
 from fastapi.responses import StreamingResponse
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
@@ -8,11 +8,13 @@ import io
 import csv
 import logging
 import uuid
+import secrets
+import hashlib
 from pathlib import Path
 from pydantic import BaseModel, Field
 from typing import List, Optional
 from datetime import datetime, timezone, timedelta
-import httpx
+from passlib.context import CryptContext
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -23,6 +25,7 @@ db = client[os.environ['DB_NAME']]
 
 app = FastAPI()
 api_router = APIRouter(prefix="/api")
+passwords = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 # -------- Helpers --------
 def now_utc():
@@ -37,12 +40,12 @@ DEFAULT_CATEGORIES = [
     {"name": "Vendor Payment", "color": "#7C3AED", "is_default": True},
     {"name": "Tax Payment", "color": "#D97706", "is_default": True},
     {"name": "Salary Advance", "color": "#059669", "is_default": True},
+    {"name": "Employer Salary", "color": "#0F766E", "is_default": True},
 ]
 
 async def ensure_defaults():
-    count = await db.categories.count_documents({})
-    if count == 0:
-        for c in DEFAULT_CATEGORIES:
+    for c in DEFAULT_CATEGORIES:
+        if not await db.categories.find_one({"name": c["name"]}):
             await db.categories.insert_one({
                 "category_id": f"cat_{uuid.uuid4().hex[:10]}",
                 "name": c["name"],
@@ -71,7 +74,8 @@ async def get_current_user(request: Request) -> User:
             token = auth[7:]
     if not token:
         raise HTTPException(status_code=401, detail="Not authenticated")
-    session = await db.user_sessions.find_one({"session_token": token}, {"_id": 0})
+    token_hash = hashlib.sha256(token.encode()).hexdigest()
+    session = await db.user_sessions.find_one({"$or": [{"session_token_hash": token_hash}, {"session_token": token}]}, {"_id": 0})
     if not session:
         raise HTTPException(status_code=401, detail="Invalid session")
     expires_at = session["expires_at"]
@@ -108,50 +112,17 @@ async def _resolve_role_for(email: str, current_role: Optional[str] = None) -> s
     user_count = await db.users.count_documents({})
     return "owner" if user_count == 0 else "accountant"
 
-@api_router.post("/auth/session")
-async def process_session(request: Request, response: Response):
-    body = await request.json()
-    session_id = body.get("session_id")
-    if not session_id:
-        raise HTTPException(status_code=400, detail="Missing session_id")
+class LoginPayload(BaseModel):
+    email: str
+    password: str
 
-    async with httpx.AsyncClient() as c:
-        r = await c.get(
-            "https://demobackend.emergentagent.com/auth/v1/env/oauth/session-data",
-            headers={"X-Session-ID": session_id},
-            timeout=15.0,
-        )
-        if r.status_code != 200:
-            raise HTTPException(status_code=401, detail="Invalid session_id")
-        data = r.json()
-
-    email = data["email"]
-    existing = await db.users.find_one({"email": email}, {"_id": 0})
-    if existing:
-        user_id = existing["user_id"]
-        # Recompute role — OWNER_EMAILS env should always take precedence
-        role = await _resolve_role_for(email, existing["role"])
-        await db.users.update_one(
-            {"user_id": user_id},
-            {"$set": {"name": data["name"], "picture": data.get("picture"), "role": role}},
-        )
-    else:
-        role = await _resolve_role_for(email)
-        user_id = f"user_{uuid.uuid4().hex[:12]}"
-        await db.users.insert_one({
-            "user_id": user_id,
-            "email": email,
-            "name": data["name"],
-            "picture": data.get("picture"),
-            "role": role,
-            "created_at": iso(now_utc()),
-        })
-
-    session_token = data["session_token"]
+async def _create_session(user: dict, response: Response):
+    session_token = secrets.token_urlsafe(48)
     expires_at = now_utc() + timedelta(days=7)
+    await db.user_sessions.delete_many({"user_id": user["user_id"]})
     await db.user_sessions.insert_one({
-        "user_id": user_id,
-        "session_token": session_token,
+        "user_id": user["user_id"],
+        "session_token_hash": hashlib.sha256(session_token.encode()).hexdigest(),
         "expires_at": iso(expires_at),
         "created_at": iso(now_utc()),
     })
@@ -161,11 +132,37 @@ async def process_session(request: Request, response: Response):
         value=session_token,
         max_age=7 * 24 * 3600,
         httponly=True,
-        secure=True,
-        samesite="none",
+        secure=os.environ.get("COOKIE_SECURE", "true").lower() == "true",
+        samesite="none" if os.environ.get("COOKIE_SECURE", "true").lower() == "true" else "lax",
         path="/",
     )
-    return {"user_id": user_id, "email": email, "name": data["name"], "picture": data.get("picture"), "role": role}
+    return User(**user).model_dump()
+
+@api_router.post("/auth/login")
+async def password_login(payload: LoginPayload, response: Response):
+    email = payload.email.strip().lower()
+    user = await db.users.find_one({"email": email}, {"_id": 0})
+    initial_owner_password = os.environ.get("OWNER_INITIAL_PASSWORD", "")
+    if not user and email in _owner_emails() and initial_owner_password and secrets.compare_digest(payload.password, initial_owner_password):
+        user = {"user_id": f"user_{uuid.uuid4().hex[:12]}", "email": email, "name": "Owner", "role": "owner", "created_at": iso(now_utc()), "password_hash": passwords.hash(payload.password)}
+        await db.users.insert_one(user)
+    if not user or not user.get("password_hash") or not passwords.verify(payload.password, user["password_hash"]):
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+    return await _create_session(user, response)
+
+class PasswordChange(BaseModel):
+    current_password: Optional[str] = None
+    new_password: str
+
+@api_router.post("/auth/change-password")
+async def change_password(payload: PasswordChange, user: User = Depends(get_current_user)):
+    if len(payload.new_password) < 10:
+        raise HTTPException(status_code=400, detail="Password must have at least 10 characters")
+    current = await db.users.find_one({"user_id": user.user_id}, {"_id": 0})
+    if current.get("password_hash") and (not payload.current_password or not passwords.verify(payload.current_password, current["password_hash"])):
+        raise HTTPException(status_code=401, detail="Current password is incorrect")
+    await db.users.update_one({"user_id": user.user_id}, {"$set": {"password_hash": passwords.hash(payload.new_password), "password_changed_at": iso(now_utc())}})
+    return {"ok": True}
 
 @api_router.get("/auth/me")
 async def me(user: User = Depends(get_current_user)):
@@ -180,7 +177,7 @@ async def me(user: User = Depends(get_current_user)):
 async def logout(request: Request, response: Response):
     token = request.cookies.get("session_token")
     if token:
-        await db.user_sessions.delete_one({"session_token": token})
+        await db.user_sessions.delete_one({"session_token_hash": hashlib.sha256(token.encode()).hexdigest()})
     response.delete_cookie("session_token", path="/")
     return {"ok": True}
 
@@ -336,6 +333,8 @@ class ExpenseCreate(BaseModel):
     notes: Optional[str] = ""
     employee_id: Optional[str] = None  # for Salary Advance
     firm_id: Optional[str] = None
+    receipt_url: Optional[str] = ""
+    salary_paid_by: Optional[str] = None  # Owner | Accountant; only for Employer Salary
 
 class ExpenseUpdate(BaseModel):
     date: Optional[str] = None
@@ -346,6 +345,8 @@ class ExpenseUpdate(BaseModel):
     notes: Optional[str] = None
     employee_id: Optional[str] = None
     firm_id: Optional[str] = None
+    receipt_url: Optional[str] = None
+    salary_paid_by: Optional[str] = None
 
 @api_router.get("/expenses")
 async def list_expenses(
@@ -355,6 +356,7 @@ async def list_expenses(
     start: Optional[str] = None,
     end: Optional[str] = None,
     firm_id: Optional[str] = None,
+    search: Optional[str] = None,
     limit: int = 500,
 ):
     q = {}
@@ -364,6 +366,8 @@ async def list_expenses(
         q["payment_mode"] = payment_mode
     if firm_id:
         q["firm_id"] = firm_id
+    if search and search.strip():
+        q["vendor"] = {"$regex": search.strip(), "$options": "i"}
     if start or end:
         dq = {}
         if start:
@@ -378,6 +382,8 @@ async def list_expenses(
 async def create_expense(payload: ExpenseCreate, user: User = Depends(get_current_user)):
     if payload.payment_mode not in ("Cash", "UPI/Bank"):
         raise HTTPException(status_code=400, detail="Invalid payment_mode")
+    if payload.category == "Employer Salary" and payload.salary_paid_by not in ("Owner", "Accountant"):
+        raise HTTPException(status_code=400, detail="Choose whether the Owner or Accountant paid the salary")
     doc = {
         "expense_id": f"exp_{uuid.uuid4().hex[:10]}",
         "date": payload.date,
@@ -388,6 +394,8 @@ async def create_expense(payload: ExpenseCreate, user: User = Depends(get_curren
         "notes": payload.notes or "",
         "employee_id": payload.employee_id,
         "firm_id": payload.firm_id,
+        "receipt_url": payload.receipt_url or "",
+        "salary_paid_by": payload.salary_paid_by if payload.category == "Employer Salary" else None,
         "created_by": user.user_id,
         "created_at": iso(now_utc()),
     }
@@ -416,6 +424,10 @@ async def delete_expense(expense_id: str, user: User = Depends(require_owner)):
 class RepayPayload(BaseModel):
     repaid: bool = True
 
+class SalaryPayment(BaseModel):
+    paid: bool = True
+    payment_mode: str = "UPI/Bank"
+
 @api_router.patch("/expenses/{expense_id}/repay")
 async def repay_advance(expense_id: str, payload: RepayPayload, user: User = Depends(get_current_user)):
     exp = await db.expenses.find_one({"expense_id": expense_id}, {"_id": 0})
@@ -432,6 +444,12 @@ async def repay_advance(expense_id: str, payload: RepayPayload, user: User = Dep
     doc = await db.expenses.find_one({"expense_id": expense_id}, {"_id": 0})
     return doc
 
+@api_router.patch("/employees/{employee_id}/salary-payment")
+async def mark_salary_paid(employee_id: str, payload: SalaryPayment, month: str = Query(...), user: User = Depends(require_owner)):
+    if not await db.employees.find_one({"employee_id": employee_id}): raise HTTPException(status_code=404, detail="Employee not found")
+    await db.salary_payments.update_one({"employee_id": employee_id, "month": month}, {"$set": {"employee_id": employee_id, "month": month, "paid": payload.paid, "payment_mode": payload.payment_mode, "paid_at": iso(now_utc()) if payload.paid else None, "paid_by": user.user_id}}, upsert=True)
+    return {"ok": True}
+
 @api_router.get("/expenses/export")
 async def export_expenses(user: User = Depends(get_current_user)):
     docs = await db.expenses.find({}, {"_id": 0}).sort("date", -1).to_list(10000)
@@ -442,6 +460,51 @@ async def export_expenses(user: User = Depends(get_current_user)):
         w.writerow([d.get("date"), d.get("vendor"), d.get("category"), d.get("amount"), d.get("payment_mode"), d.get("notes", "")])
     buf.seek(0)
     return StreamingResponse(iter([buf.getvalue()]), media_type="text/csv", headers={"Content-Disposition": "attachment; filename=expenses.csv"})
+
+@api_router.post("/expenses/import")
+async def import_expenses(file: UploadFile = File(...), user: User = Depends(require_owner)):
+    """Owner-only CSV import. Required columns: Date, Vendor, Category, Amount (INR), Payment Mode."""
+    try:
+        rows = list(csv.DictReader((await file.read()).decode("utf-8-sig").splitlines()))
+    except UnicodeDecodeError:
+        raise HTTPException(status_code=400, detail="Please upload a UTF-8 CSV file")
+    created = 0
+    for row in rows:
+        date, vendor = row.get("Date", "").strip(), row.get("Vendor", "").strip()
+        category, mode = row.get("Category", "").strip(), row.get("Payment Mode", "").strip()
+        if not date or not vendor or not category or mode not in ("Cash", "UPI/Bank"): continue
+        try: amount = float(row.get("Amount (INR)", ""))
+        except ValueError: continue
+        await db.expenses.insert_one({"expense_id": f"exp_{uuid.uuid4().hex[:10]}", "date": date, "vendor": vendor, "category": category, "amount": amount, "payment_mode": mode, "notes": row.get("Notes", ""), "created_by": user.user_id, "created_at": iso(now_utc()), "imported": True})
+        created += 1
+    return {"ok": True, "imported": created, "skipped": len(rows) - created}
+
+class RecurringExpense(BaseModel):
+    vendor: str; category: str; amount: float; payment_mode: str = "UPI/Bank"; day_of_month: int = Field(1, ge=1, le=28); notes: str = ""; firm_id: Optional[str] = None
+
+@api_router.get("/recurring-expenses")
+async def list_recurring(user: User = Depends(get_current_user)):
+    return await db.recurring_expenses.find({}, {"_id": 0}).sort("created_at", -1).to_list(500)
+
+@api_router.post("/recurring-expenses")
+async def create_recurring(payload: RecurringExpense, user: User = Depends(require_owner)):
+    doc = payload.model_dump() | {"recurring_id": f"rec_{uuid.uuid4().hex[:10]}", "active": True, "created_at": iso(now_utc())}
+    await db.recurring_expenses.insert_one(doc); return doc
+
+@api_router.delete("/recurring-expenses/{recurring_id}")
+async def delete_recurring(recurring_id: str, user: User = Depends(require_owner)):
+    await db.recurring_expenses.delete_one({"recurring_id": recurring_id}); return {"ok": True}
+
+class Budget(BaseModel):
+    category: str; amount: float; month: str; firm_id: Optional[str] = None
+
+@api_router.get("/budgets")
+async def list_budgets(month: Optional[str] = None, user: User = Depends(get_current_user)):
+    q = {"month": month} if month else {}; return await db.budgets.find(q, {"_id": 0}).to_list(500)
+
+@api_router.put("/budgets")
+async def save_budget(payload: Budget, user: User = Depends(require_owner)):
+    doc = payload.model_dump() | {"updated_at": iso(now_utc())}; await db.budgets.update_one({"month": payload.month, "category": payload.category, "firm_id": payload.firm_id}, {"$set": doc}, upsert=True); return doc
 
 # -------- Tax Compliance --------
 class TaxCreate(BaseModel):
@@ -500,6 +563,47 @@ async def export_tax(user: User = Depends(get_current_user)):
     return StreamingResponse(iter([buf.getvalue()]), media_type="text/csv", headers={"Content-Disposition": "attachment; filename=tax_register.csv"})
 
 # -------- Salary Ledger --------
+class AttendanceUpdate(BaseModel):
+    employee_id: str
+    date: str  # YYYY-MM-DD
+    status: str  # Present | Half Day | Absent
+    notes: Optional[str] = ""
+
+@api_router.get("/attendance")
+async def list_attendance(date: str = Query(...), firm_id: Optional[str] = None, user: User = Depends(get_current_user)):
+    emp_q = {"active": {"$ne": False}}
+    if firm_id: emp_q["firm_id"] = firm_id
+    employees = await db.employees.find(emp_q, {"_id": 0}).sort("name", 1).to_list(500)
+    records = await db.attendance.find({"date": date}, {"_id": 0}).to_list(500)
+    record_map = {r["employee_id"]: r for r in records}
+    return {"date": date, "employees": [{**e, "attendance": record_map.get(e["employee_id"])} for e in employees]}
+
+@api_router.put("/attendance")
+async def save_attendance(payload: AttendanceUpdate, user: User = Depends(get_current_user)):
+    if payload.status not in ("Present", "Half Day", "Absent"):
+        raise HTTPException(status_code=400, detail="Status must be Present, Half Day, or Absent")
+    if not await db.employees.find_one({"employee_id": payload.employee_id, "active": {"$ne": False}}):
+        raise HTTPException(status_code=404, detail="Active employee not found")
+    doc = {"employee_id": payload.employee_id, "date": payload.date, "status": payload.status, "notes": payload.notes or "", "updated_by": user.user_id, "updated_at": iso(now_utc())}
+    await db.attendance.update_one({"employee_id": payload.employee_id, "date": payload.date}, {"$set": doc}, upsert=True)
+    return doc
+
+@api_router.get("/attendance/summary")
+async def attendance_summary(month: str = Query(...), firm_id: Optional[str] = None, user: User = Depends(get_current_user)):
+    year, m = map(int, month.split("-")); next_month = f"{year+1}-01-01" if m == 12 else f"{year}-{m+1:02d}-01"
+    emp_q = {"active": {"$ne": False}}
+    if firm_id: emp_q["firm_id"] = firm_id
+    employees = await db.employees.find(emp_q, {"_id": 0}).to_list(500)
+    days_in_month = (datetime(year + (m == 12), 1 if m == 12 else m + 1, 1) - datetime(year, m, 1)).days
+    rows = []
+    for e in employees:
+        records = await db.attendance.find({"employee_id": e["employee_id"], "date": {"$gte": f"{month}-01", "$lt": next_month}}, {"_id": 0}).to_list(100)
+        present = sum(r["status"] == "Present" for r in records); half = sum(r["status"] == "Half Day" for r in records); absent = sum(r["status"] == "Absent" for r in records)
+        payable_days = present + half * .5
+        salary = float(e["base_salary"]) if not records else round(float(e["base_salary"]) * payable_days / days_in_month, 2)
+        rows.append({"employee_id": e["employee_id"], "name": e["name"], "base_salary": e["base_salary"], "present_days": present, "half_days": half, "absent_days": absent, "payable_days": payable_days, "calculated_salary": salary, "attendance_recorded": bool(records), "records": sorted(records, key=lambda r: r["date"])})
+    return {"month": month, "days_in_month": days_in_month, "employees": rows}
+
 @api_router.get("/ledger")
 async def ledger(user: User = Depends(get_current_user), month: Optional[str] = Query(None), firm_id: Optional[str] = None):
     """month format: YYYY-MM. Returns per-employee advances and net payable for the month."""
@@ -518,6 +622,10 @@ async def ledger(user: User = Depends(get_current_user), month: Optional[str] = 
         next_month = f"{year}-{m+1:02d}-01"
     result = []
     for e in employees:
+        attendance_records = await db.attendance.find({"employee_id": e["employee_id"], "date": {"$gte": start, "$lt": next_month}}, {"_id": 0}).to_list(100)
+        days_in_month = (datetime(year + (m == 12), 1 if m == 12 else m + 1, 1) - datetime(year, m, 1)).days
+        payable_days = sum(1 if r["status"] == "Present" else .5 if r["status"] == "Half Day" else 0 for r in attendance_records)
+        attendance_salary = float(e["base_salary"]) if not attendance_records else round(float(e["base_salary"]) * payable_days / days_in_month, 2)
         pipeline = [
             {"$match": {"employee_id": e["employee_id"], "category": "Salary Advance", "date": {"$gte": start, "$lt": next_month}, "repaid": {"$ne": True}}},
             {"$group": {"_id": None, "total": {"$sum": "$amount"}}},
@@ -535,22 +643,23 @@ async def ledger(user: User = Depends(get_current_user), month: Optional[str] = 
             "role_title": e.get("role_title", ""),
             "base_salary": e["base_salary"],
             "advances": advances,
-            "net_payable": float(e["base_salary"]) - advances,
+            "attendance_salary": attendance_salary,
+            "payable_days": payable_days if attendance_records else days_in_month,
+            "attendance_recorded": bool(attendance_records),
+            "net_payable": attendance_salary - advances,
             "advance_entries": advances_list,
         })
     return {"month": month, "employees": result}
 
 # -------- Dashboard --------
 @api_router.get("/dashboard")
-async def dashboard(user: User = Depends(get_current_user), month: Optional[str] = Query(None)):
-    if not month:
-        month = now_utc().strftime("%Y-%m")
-    start = f"{month}-01"
-    year, m = map(int, month.split("-"))
-    if m == 12:
-        next_month = f"{year+1}-01-01"
+async def dashboard(user: User = Depends(get_current_user), month: Optional[str] = Query(None), year: Optional[str] = Query(None)):
+    if year:
+        start, next_month, period_label = f"{year}-01-01", f"{int(year)+1}-01-01", year
     else:
-        next_month = f"{year}-{m+1:02d}-01"
+        if not month: month = now_utc().strftime("%Y-%m")
+        start = f"{month}-01"; y, m = map(int, month.split("-"))
+        next_month = f"{y+1}-01-01" if m == 12 else f"{y}-{m+1:02d}-01"; period_label = month
 
     date_q = {"date": {"$gte": start, "$lt": next_month}}
     expenses = await db.expenses.find(date_q, {"_id": 0}).to_list(10000)
@@ -575,8 +684,10 @@ async def dashboard(user: User = Depends(get_current_user), month: Optional[str]
     breakdown_list = [{"category": k, "amount": v, "color": cat_map.get(k, "#71717a")} for k, v in breakdown.items()]
     breakdown_list.sort(key=lambda x: x["amount"], reverse=True)
 
+    attendance = await db.attendance.find({"date": {"$gte": start, "$lt": next_month}}, {"_id": 0}).to_list(10000)
+    attendance_summary = {"present": sum(x["status"] == "Present" for x in attendance), "half_day": sum(x["status"] == "Half Day" for x in attendance), "absent": sum(x["status"] == "Absent" for x in attendance)}
     return {
-        "month": month,
+        "month": period_label,
         "total_spend": total_spend,
         "total_petrol": total_petrol,
         "total_advances": total_advances,
@@ -585,7 +696,43 @@ async def dashboard(user: User = Depends(get_current_user), month: Optional[str]
         "cash_upi_ratio": {"cash": cash, "upi": upi},
         "category_breakdown": breakdown_list,
         "expense_count": len(expenses),
+        "attendance": attendance_summary,
     }
+
+@api_router.get("/reports/category-spend/export")
+async def export_category_spend(month: Optional[str] = None, year: Optional[str] = None, user: User = Depends(get_current_user)):
+    if year:
+        start, end, label = f"{year}-01-01", f"{int(year)+1}-01-01", year
+    elif month:
+        y, m = map(int, month.split("-")); start, end, label = f"{month}-01", (f"{y+1}-01-01" if m == 12 else f"{y}-{m+1:02d}-01"), month
+    else:
+        raise HTTPException(status_code=400, detail="Select a month or year")
+    expenses = await db.expenses.find({"date": {"$gte": start, "$lt": end}}, {"_id": 0}).to_list(10000)
+    totals = {}
+    for expense in expenses: totals[expense["category"]] = totals.get(expense["category"], 0) + expense["amount"]
+    buf = io.StringIO(); writer = csv.writer(buf); writer.writerow(["Period", "Category", "Amount (INR)"])
+    for category, amount in sorted(totals.items(), key=lambda item: item[1], reverse=True): writer.writerow([label, category, amount])
+    return StreamingResponse(iter([buf.getvalue()]), media_type="text/csv", headers={"Content-Disposition": f"attachment; filename=category_spend_{label}.csv"})
+
+@api_router.get("/reports/summary")
+async def report_summary(start: str, end: str, firm_id: Optional[str] = None, user: User = Depends(get_current_user)):
+    q = {"date": {"$gte": start, "$lte": end}}
+    if firm_id: q["firm_id"] = firm_id
+    expenses = await db.expenses.find(q, {"_id": 0}).to_list(10000)
+    tax = await db.tax_entries.find(q, {"_id": 0}).to_list(10000)
+    categories = {}
+    for e in expenses: categories[e["category"]] = categories.get(e["category"], 0) + e["amount"]
+    return {"start": start, "end": end, "expense_total": sum(e["amount"] for e in expenses), "tax_total": sum(t["amount"] for t in tax), "entries": len(expenses), "by_category": categories, "cash": sum(e["amount"] for e in expenses if e["payment_mode"] == "Cash"), "upi": sum(e["amount"] for e in expenses if e["payment_mode"] == "UPI/Bank")}
+
+@api_router.get("/reminders")
+async def reminders(user: User = Depends(get_current_user)):
+    today = now_utc().date(); due = []
+    # Practical GST/advance-tax prompt dates; users still record the actual challan payment.
+    for label, month, day in [("GST payment", today.month, 20), ("Advance tax", 6, 15), ("Advance tax", 9, 15), ("Advance tax", 12, 15), ("Advance tax", 3, 15)]:
+        year = today.year if month >= today.month else today.year + 1
+        d = datetime(year, month, day).date(); delta = (d - today).days
+        if 0 <= delta <= 30: due.append({"title": label, "due_date": d.isoformat(), "days_remaining": delta})
+    return due
 
 # -------- Payslip --------
 @api_router.get("/payslip/{employee_id}")
