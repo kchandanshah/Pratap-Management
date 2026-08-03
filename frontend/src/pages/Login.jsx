@@ -4,7 +4,7 @@ import { Wallet, ChartLine, Users, Receipt } from "lucide-react";
 export default function Login() {
   const handleLogin = () => {
     // REMINDER: DO NOT HARDCODE THE URL, OR ADD ANY FALLBACKS OR REDIRECT URLS, THIS BREAKS THE AUTH
-    const redirectUrl = window.location.origin + "/dashboard";
+    const redirectUrl = window.location.origin + "/#/dashboard";
     window.location.href = `https://auth.emergentagent.com/?redirect=${encodeURIComponent(redirectUrl)}`;
   };
 

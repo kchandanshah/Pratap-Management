@@ -27,8 +27,8 @@ export default function AuthCallback() {
         const r = await api.post("/auth/session", { session_id: sessionId });
         setUser(r.data);
         // Clean hash
-        window.history.replaceState(null, "", "/dashboard");
-        navigate("/dashboard", { replace: true, state: { user: r.data } });
+        window.history.replaceState(null, "", "/#/dashboard");
+        navigate("/dashboard", { replace: true });
       } catch (e) {
         console.error("Auth callback failed", e);
         navigate("/");
